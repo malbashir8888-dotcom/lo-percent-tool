@@ -5,29 +5,40 @@ import re
 
 st.set_page_config(page_title="LO from Grades Tool", layout="centered")
 
-st.markdown("## 📊 حساب مخرجات التعلّم من ملف الدرجات")
+# ------------------------------------------------------------
+# UI TEXT (English)
+# ------------------------------------------------------------
+st.markdown("## 📊 Learning Outcomes Calculation from Grades File")
 st.write("""
-هذه الأداة تحسب نسب مخرجات التعلّم مباشرة من ملف درجات الطلاب،
-بشرط أن يحتوي الملف على:
-- صف يوضح رقم مخرج التعلّم (LO)
-- صف يوضح الدرجة العظمى لكل سؤال (/5، /10، /3…)
-- صفوف الطلاب ودرجاتهم
+This tool calculates Learning Outcomes (LO) percentages directly from a student grades file,
+provided that the file contains:
+- A row specifying the Learning Objective (LO)
+- A row containing the maximum score for each question (/5, /10, /3…)
+- Student rows with their scores
 """)
 
 uploaded_file = st.file_uploader(
-    "اختيار ملف درجات (Excel أو ODS)",
+    "Select a grades file (Excel or ODS)",
     type=["xlsx", "xls", "ods"]
 )
 
+# ------------------------------------------------------------
+# Read file
+# ------------------------------------------------------------
 def read_grade_sheet(uploaded_file, sheet_name=0):
     buffer = BytesIO(uploaded_file.getvalue())
     ext = uploaded_file.name.lower().split(".")[-1]
+
     if ext == "ods":
         df = pd.read_excel(buffer, engine="odf", sheet_name=sheet_name, header=None)
     else:
         df = pd.read_excel(buffer, sheet_name=sheet_name, header=None)
+
     return df
 
+# ------------------------------------------------------------
+# Build LO report
+# ------------------------------------------------------------
 def build_lo_report_from_grades(df,
                                 lo_row_index=4,
                                 max_row_index=5,
@@ -45,6 +56,7 @@ def build_lo_report_from_grades(df,
 
         max_raw = max_row[col]
 
+        # Extract max score if written as "/5", "/3", etc.
         if isinstance(max_raw, str):
             m = re.search(r'(\d+(\.\d+)?)', max_raw)
             if not m:
@@ -71,11 +83,13 @@ def build_lo_report_from_grades(df,
         lo_stats[lo]["total_score"] += total_score
         lo_stats[lo]["total_max"] += total_max
 
+    # Build report rows
     rows = []
 
     overall_total = sum(v["total_score"] for v in lo_stats.values())
     overall_max   = sum(v["total_max"]   for v in lo_stats.values())
     overall_percent = (overall_total / overall_max) * 100 if overall_max else None
+
     rows.append({
         "Learning Objective": "Overall",
         "Total": overall_total,
@@ -96,19 +110,25 @@ def build_lo_report_from_grades(df,
 
     return pd.DataFrame(rows)
 
-st.markdown("### إعداد الصفوف (كما تظهر في Excel)")
+# ------------------------------------------------------------
+# Row selection (English)
+# ------------------------------------------------------------
+st.markdown("### Excel Row Settings (as they appear in your file)")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    lo_row_excel = st.number_input("صف مخرجات التعلم (LO)", min_value=1, value=5)
+    lo_row_excel = st.number_input("LO Row Number", min_value=1, value=5)
 with col2:
-    max_row_excel = st.number_input("صف الدرجة العظمى للسؤال", min_value=1, value=6)
+    max_row_excel = st.number_input("Max Score Row Number", min_value=1, value=6)
 with col3:
-    student_start_excel = st.number_input("أول صف للطلاب", min_value=1, value=7)
+    student_start_excel = st.number_input("First Student Row Number", min_value=1, value=7)
 
-if st.button("تحليل ملف الدرجات"):
+# ------------------------------------------------------------
+# RUN BUTTON
+# ------------------------------------------------------------
+if st.button("Analyze Grades File"):
     if not uploaded_file:
-        st.error("الرجاء رفع ملف الدرجات أولًا.")
+        st.error("Please upload a grades file first.")
     else:
         df = read_grade_sheet(uploaded_file)
 
@@ -119,7 +139,7 @@ if st.button("تحليل ملف الدرجات"):
             student_start_index=student_start_excel - 1
         )
 
-        st.subheader("نتيجة تحليل مخرجات التعلم")
+        st.subheader("Learning Outcomes Analysis Result")
         st.dataframe(report)
 
         output = BytesIO()
@@ -128,7 +148,7 @@ if st.button("تحليل ملف الدرجات"):
         output.seek(0)
 
         st.download_button(
-            "تحميل تقرير المخرجات (Excel)",
+            "Download Learning Outcomes Report (Excel)",
             data=output,
             file_name="LO_Report_from_grades.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
