@@ -4,20 +4,23 @@ from io import BytesIO
 
 st.set_page_config(page_title="Merge LO Percent Tool", layout="centered")
 
-st.markdown("## 🧮 أداة دمج نسب مخرجات التعلّم من أكثر من مصدر")
+# --------------------------------------------------------
+# UI TEXT (English)
+# --------------------------------------------------------
+st.markdown("## 🧮 Merged Learning Outcomes Percent Tool")
 st.write(
     """
-ترفع في هذه الأداة جميع الملفات النهائية المتاحة للمقرر الواحد، وتشمل:
-- تقارير **Remark** من نوع *Class Learning Objective Report*.
-- تقارير الأداة الثانية الناتجة عن تحليل ملف الدرجات (ملف يحتوي أعمدة: *Learning Objective* و *Percent*).
+In this tool, you can upload all final files for a single course, including:
+- **Remark®** reports of type *Class Learning Objective Report*.
+- Reports generated from the second tool (files that contain the columns *Learning Objective* and *Percent*).
 
-ستقوم الأداة بالتعرّف تلقائيًا على نوع كل ملف، ثم دمج جميع النِّسَب
-وحساب متوسط نسبة كل مخرج تعلّم (LO) في تقرير واحد نهائي.
+The tool will automatically detect the type of each file, extract all LO percentages,
+and then compute the average percentage for each Learning Outcome (LO) in one final merged report.
 """
 )
 
 # --------------------------------------------------------
-# دالة 1: استخراج Percent من تقرير Remark
+# Function 1: Extract Percent from Remark report
 # --------------------------------------------------------
 def extract_from_remark(file_obj, filename):
     try:
@@ -57,17 +60,17 @@ def extract_from_remark(file_obj, filename):
 
 
 # --------------------------------------------------------
-# دالة 2: استخراج Percent من تقرير الأداة الثانية
-#   (ملف فيه أعمدة: Learning Objective, Percent)
+# Function 2: Extract Percent from second-tool report
+#   (file with columns: Learning Objective, Percent)
 # --------------------------------------------------------
 def extract_from_lo_report(file_obj, filename):
     try:
-        # نقرأ أول شيت بافتراض أن الهيدر في الصف الأول
+        # Read the first sheet assuming header is in the first row
         df = pd.read_excel(file_obj, sheet_name=0)
     except Exception:
         return pd.DataFrame()
 
-    # توحيد الأسماء (حساسية صغيرة للاختلافات في الكتابة)
+    # Normalize column names (to handle small variations)
     normalized_cols = {c: str(c).strip().lower() for c in df.columns}
 
     lo_col = None
@@ -86,55 +89,55 @@ def extract_from_lo_report(file_obj, filename):
     sub["Source_File"] = filename
     sub["Source_Type"] = "Grades-Report"
 
-    # إزالة الصفوف الفارغة
+    # Remove empty rows
     sub = sub.dropna(subset=["Learning_Objective"])
     return sub
 
 
 # --------------------------------------------------------
-# واجهة رفع الملفات
+# File upload UI
 # --------------------------------------------------------
 uploaded_files = st.file_uploader(
-    "اختيار جميع الملفات (Remark + تقارير الأداة الثانية)",
+    "Upload all files (Remark + second-tool reports)",
     type=["xlsx", "xls"],
     accept_multiple_files=True,
 )
 
-if st.button("تنفيذ الدمج"):
+if st.button("Run Merge"):
     if not uploaded_files:
-        st.error("الرجاء رفع ملف واحد على الأقل.")
+        st.error("Please upload at least one file.")
     else:
         all_rows = []
 
         for f in uploaded_files:
-            # نجرب أولاً: هل هو تقرير Remark؟
+            # First, try Remark report
             df_r = extract_from_remark(f, f.name)
             if not df_r.empty:
                 all_rows.append(df_r)
                 continue
 
-            # إن لم يكن Remark نجرب نوع تقرير الأداة الثانية
+            # If not Remark, try second-tool report
             f.seek(0)
             df_g = extract_from_lo_report(f, f.name)
             if not df_g.empty:
                 all_rows.append(df_g)
                 continue
 
-            # إن لم يتعرّف عليه أي نوع:
-            st.warning(f"لم يتم التعرّف على نوع الملف: {f.name}")
+            # If file type cannot be detected
+            st.warning(f"File type could not be detected: {f.name}")
 
         if not all_rows:
-            st.error("لم يتم استخراج أي بيانات من الملفات المرفوعة.")
+            st.error("No usable data were extracted from the uploaded files.")
         else:
             merged = pd.concat(all_rows, ignore_index=True)
 
-            # تحويل Percent إلى أعداد
+            # Convert Percent to numeric
             merged["Percent"] = pd.to_numeric(
                 merged["Percent"], errors="coerce"
             )
             merged = merged.dropna(subset=["Percent"])
 
-            # جدول ملخّص
+            # Summary table
             summary = (
                 merged.groupby("Learning_Objective", as_index=False)
                 .agg(
@@ -144,13 +147,13 @@ if st.button("تنفيذ الدمج"):
                 .sort_values("Learning_Objective")
             )
 
-            st.subheader("النتائج التفصيلية (من جميع الملفات)")
+            st.subheader("Detailed results (all files)")
             st.dataframe(merged)
 
-            st.subheader("ملخّص مخرجات التعلّم بعد الدمج")
+            st.subheader("Merged Learning Outcomes Summary")
             st.dataframe(summary)
 
-            # تجهيز ملف Excel للتحميل
+            # Prepare Excel for download
             output = BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 summary.to_excel(
@@ -162,7 +165,7 @@ if st.button("تنفيذ الدمج"):
             output.seek(0)
 
             st.download_button(
-                "تحميل تقرير الدمج النهائي (Excel)",
+                "Download Final Merged Report (Excel)",
                 data=output,
                 file_name="Merged_LO_Percent_Report.xlsx",
                 mime=(
